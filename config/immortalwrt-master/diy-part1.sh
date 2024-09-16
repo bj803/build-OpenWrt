@@ -11,4 +11,4 @@
 
 # other
 # rm -rf package/emortal/{autosamba,ipv6-helper}
-
+rm -rf package/emortal/{autosamba}
