@@ -1,9 +1,19 @@
-name: Build 803P2024
+name: Build OpenWrt
 
 on:
   repository_dispatch:
   workflow_dispatch:
-
+    inputs:
+      source_branch:
+        description: "Select the source branch"
+        required: false
+        default: "immortalwrt-master"
+        type: choice
+        options:
+          - openwrt-main
+          - lede-master
+          - immortalwrt-master
+          - Lienol-master
 env:
   REPO_URL: https://github.com/coolsnowwolf/lede
   REPO_BRANCH: master
