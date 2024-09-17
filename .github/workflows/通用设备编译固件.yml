@@ -12,7 +12,7 @@ on:
       source_branch:
         description: "Select the source branch"
         required: false
-        default: "openwrt-main"
+        default: "immortalwrt-master"
         type: choice
         options:
           - openwrt-main
@@ -25,9 +25,9 @@ env:
   CONFIG_FILE: config/${{ inputs.source_branch }}/config
   DIY_P1_SH: config/${{ inputs.source_branch }}/diy-part1.sh
   DIY_P2_SH: config/${{ inputs.source_branch }}/diy-part2.sh
-  UPLOAD_BIN_DIR: true
+  UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
+  UPLOAD_RELEASE: false
   TZ: Asia/Shanghai
 
 jobs:
@@ -191,13 +191,13 @@ jobs:
           body: |
 
             ### OpenWrt Image information
-            - Default IP: 192.168.1.1
-            - Default username: root
-            - Default password: password
-            - Default WIFI name: OpenWrt
-            - Default WIFI password: none
+            # - Default IP: 192.168.1.1
+            # - Default username: root
+            # - Default password: password
+            # - Default WIFI name: OpenWrt
+            # - Default WIFI password: none
             ### Install to EMMC
-            - Login to OpenWrt → System → Amlogic Service → Install OpenWrt
+            # - Login to OpenWrt → System → Amlogic Service → Install OpenWrt
             ### OpenWrt Image Verification
-            - sha256sum
+            # - sha256sum
     
