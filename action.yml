@@ -1,6 +1,6 @@
 name: "Make OpenWrt"
-author: "https://github.com/ophub/amlogic-s9xxx-openwrt"
-description: "Support Amlogic, Rockchip and Allwinner boxes."
+# author: "https://github.com/ophub/amlogic-s9xxx-openwrt"
+# description: "Support Amlogic, Rockchip and Allwinner boxes."
 inputs:
   mode:
     description: "Select script."
