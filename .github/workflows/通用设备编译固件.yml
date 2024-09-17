@@ -182,21 +182,16 @@ jobs:
           files: ${{ env.FIRMWARE }}/*
 
       - name: Delete workflow runs
-        uses: GitRML/delete-workflow-runs@main
+        uses: Mattraks/delete-workflow-runs@v2
         with:
           retain_days: 1
           keep_minimum_runs: 3
-          token: ${{ secrets.GH_TOKEN }}
-          body: |
 
-            ### OpenWrt Image information
-            #- Default IP: 192.168.1.1
-            #- Default username: root
-            #- Default password: password
-            #- Default WIFI name: OpenWrt
-            #- Default WIFI password: none
-            ### Install to EMMC
-            #- Login to OpenWrt → System → Amlogic Service → Install OpenWrt
-            ### OpenWrt Image Verification
-            #- sha256sum
-    
+      - name:  Remove old Releases
+        uses: dev-drprasad/delete-older-releases@v0.1.0
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        with:
+          retain_days: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
