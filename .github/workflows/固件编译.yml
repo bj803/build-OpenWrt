@@ -3,7 +3,7 @@
 # Description: Build OpenWrt
 #============================================================================================
 
-name: 通用设备编译固件
+name: 固件编译
 
 on:
   repository_dispatch:
@@ -26,7 +26,7 @@ env:
   DIY_P1_SH: config/${{ inputs.source_branch }}/diy-part1.sh
   DIY_P2_SH: config/${{ inputs.source_branch }}/diy-part2.sh
   UPLOAD_BIN_DIR: false
-  UPLOAD_FIRMWARE: true
+  UPLOAD_FIRMWARE: false
   UPLOAD_RELEASE: false
   TZ: Asia/Shanghai
 
@@ -133,7 +133,6 @@ jobs:
           echo -e "$(nproc) thread compile"
           make -j$(($(nproc) + 1)) V=s || make -j1 || make -j1 V=s
           echo "status=success" >> ${GITHUB_OUTPUT}
-
 
       - name: Check space usage
         if: (!cancelled())
