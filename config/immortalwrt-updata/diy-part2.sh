@@ -28,7 +28,7 @@ sed -i 's/\/bin\/ash/\/bin\/bash/' package/base-files/files/etc/passwd
 sed -i 's/192.168.1.1/192.168.111.3/g' package/base-files/files/bin/config_generate
 
 # 修改机器名称
-sed -i "s/ImmortalWrt/Home803P/g" package/base-files/files/bin/config_generate
+sed -i "s/ImmortalWrt/HomeImm/g" package/base-files/files/bin/config_generate
 
 # ------------------------------- Main source ends -------------------------------
 
