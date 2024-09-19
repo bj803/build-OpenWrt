@@ -18,6 +18,7 @@ on:
           - openwrt-main
           - lede-master
           - immortalwrt-master
+          - immortalwrt-updata
           - Lienol-master
       
 env:
