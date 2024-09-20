@@ -17,7 +17,7 @@ sed -i 's/root:::0:99999:7:::/root:$1$qTM.tEk0$J0I9VtO1JT99G4R2iZKaA.::0:99999:7
 sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
 
 # 替换终端为bash
-sed -i 's/\/bin\/ash/\/bin\/bash/' package/base-files/files/etc/passwd
+#sed -i 's/\/bin\/ash/\/bin\/bash/' package/base-files/files/etc/passwd
 
 # Set etc/openwrt_release
 # sed -i "s|DISTRIB_REVISION='.*'|DISTRIB_REVISION='R$(date +%Y.%m.%d)'|g" package/base-files/files/etc/openwrt_release
