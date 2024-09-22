@@ -12,13 +12,13 @@ on:
       source_branch:
         description: "Select the source branch"
         required: false
-        default: "immortalwrt-master"
+        default: "immortalwrt-mihomo"
         type: choice
         options:
           - openwrt-main
           - lede-master
           - immortalwrt-master
-          - immortalwrt-updata
+          - immortalwrt-mihomo
           - Lienol-master
       
 env:
