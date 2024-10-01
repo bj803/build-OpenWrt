@@ -12,11 +12,12 @@ on:
       source_branch:
         description: "Select the source branch"
         required: false
-        default: "immortalwrt-PHM"
+        default: "immortalwrt-PassWall"
         type: choice
         options:
           - openwrt-main
           - lede-master
+          - immortalwrt-PassWall
           - immortalwrt-PHM
           - immortalwrt-iptv
           - Lienol-master
