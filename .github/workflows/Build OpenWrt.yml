@@ -3,7 +3,8 @@
 # Description: Build OpenWrt
 #============================================================================================
 
-name: Build OpenWrt
+#name: Build OpenWrt
+name: ${{ inputs.source_branch }}
 
 on:
   repository_dispatch:
@@ -160,7 +161,8 @@ jobs:
         uses: actions/upload-artifact@main
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+#          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          name: ${{ inputs.source_branch }}
           path: ${{ env.FIRMWARE }}
 
       - name: Generate release tag
