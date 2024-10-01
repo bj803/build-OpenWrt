@@ -12,13 +12,13 @@ on:
       source_branch:
         description: "Select the source branch"
         required: false
-        default: "immortalwrt-mihomo"
+        default: "immortalwrt-PHM"
         type: choice
         options:
           - openwrt-main
           - lede-master
-          - immortalwrt-master
-          - immortalwrt-mihomo
+          - immortalwrt-PHM
+          - immortalwrt-iptv
           - Lienol-master
       
 env:
