@@ -28,7 +28,7 @@ sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/M
 sed -i 's/192.168.1.1/192.168.111.5/g' package/base-files/files/bin/config_generate
 
 # 修改机器名称
-sed -i "s/ImmortalWrt/HomeImm/g" package/base-files/files/bin/config_generate
+sed -i "s/ImmortalWrt/HomeImm111/g" package/base-files/files/bin/config_generate
 
 # ------------------------------- Main source ends -------------------------------
 
