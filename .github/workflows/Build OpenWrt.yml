@@ -18,6 +18,7 @@ on:
           - openwrt-main
           - lede-master
           - immortalwrt-PassWall
+          - immortalwrt-PassWallSD
           - immortalwrt-PHM
           - immortalwrt-iptv
           - Lienol-master
