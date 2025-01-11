@@ -32,7 +32,7 @@ sed -i "s/ImmortalWrt/HomeImm111/g" package/base-files/files/bin/config_generate
 
 # Modify hostname
 #sed -i 's/OpenWrt/P3TERX-Router/g' package/base-files/files/bin/config_generate
-sed -i 's/content="${explain}${header}"/content="${content}${explain}${header}"/g' /usr/share/wechatpush/wechatpush
+#sed -i 's/content="${explain}${header}"/content="${content}${explain}${header}"/g' /usr/share/wechatpush/wechatpush
 
 # ------------------------------- Main source ends -------------------------------
 
