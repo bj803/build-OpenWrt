@@ -8,7 +8,7 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10   #master
-  FEEDS_CONF: config/imm-PassWall/feeds.conf.default
+  FEEDS_CONF: config/imm-PassWall2410/feeds.conf.default
   CONFIG_FILE: config/imm-PassWall2410/ImmortalWrt-PassWall.config
   DIY_P1_SH: config/imm-PassWall2410/diy-part1.sh
   DIY_P2_SH: config/imm-PassWall2410/diy-part2.sh
