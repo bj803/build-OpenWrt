@@ -1,5 +1,5 @@
 
-name: Build ImmortalWrt X86_64 PassWall
+name: Build ImmortalWrt PassWall Master
 
 on:
   repository_dispatch:
@@ -8,10 +8,10 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: master   #openwrt-23.05
-  FEEDS_CONF: config/imm-PassWall/feeds.conf.default
-  CONFIG_FILE: config/imm-PassWall/ImmortalWrt-PassWall.config
-  DIY_P1_SH: config/imm-PassWall/diy-part1.sh
-  DIY_P2_SH: config/imm-PassWall/diy-part2.sh
+  FEEDS_CONF: config/imm-PassWallMaster/feeds.conf.default
+  CONFIG_FILE: config/imm-PassWallMaster/ImmortalWrt-PassWall.config
+  DIY_P1_SH: config/imm-PassWallMaster/diy-part1.sh
+  DIY_P2_SH: config/imm-PassWallMaster/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
