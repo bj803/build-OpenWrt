@@ -1,5 +1,5 @@
 
-name: Build ImmortalWrt PassWall Master
+name: Build Imm PassWall Master
 
 on:
   repository_dispatch:
