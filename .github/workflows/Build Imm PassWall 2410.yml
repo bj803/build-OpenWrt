@@ -63,9 +63,9 @@ jobs:
     - name: Combine Disks
       uses: sclsyin/maximize-build-space@master
       with:
-        swap-size-mb: 1024
+        swap-size-mb: 2048
         temp-reserve-mb: 100
-        root-reserve-mb: 1024
+        root-reserve-mb: 2048
         
     - name: Checkout
       uses: sclsyin/checkout@main
