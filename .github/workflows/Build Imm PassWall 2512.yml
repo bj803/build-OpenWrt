@@ -22,6 +22,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true   # 允许 Node.js 20 actions 继续运行至 2026.06
 
     steps:
     - name: Check Server Performance
@@ -43,7 +45,7 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        docker rmi $(docker images -q) 2>/dev/null || true
+        docker rmi $(docker images -q) 2>/dev/null || true   # 必须加 || true，否则无镜像时报错退出
         sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc \
           /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
           /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
