@@ -15,7 +15,7 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   FIRMWARE_TAG: X86_64
-  DEVICE_TARGET: X86
+  DEVICE_TARGET: x86
   DEVICE_SUBTARGET: 64
   TZ: Asia/Shanghai
 
@@ -23,7 +23,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true   # 允许 Node.js 20 actions 继续运行至 2026.06
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 强制使用 Node24，彻底消除警告
 
     steps:
     - name: Check Server Performance
@@ -45,7 +45,7 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        docker rmi $(docker images -q) 2>/dev/null || true   # 必须加 || true，否则无镜像时报错退出
+        docker rmi $(docker images -q) 2>/dev/null || true
         sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc \
           /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
           /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
@@ -68,14 +68,14 @@ jobs:
         sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
 
     - name: Combine Disks
-      uses: sclsyin/maximize-build-space@master
+      uses: easimon/maximize-build-space@master
       with:
         swap-size-mb: 2048
         temp-reserve-mb: 100
         root-reserve-mb: 2048
 
     - name: Checkout
-      uses: sclsyin/checkout@main
+      uses: actions/checkout@v4
 
     - name: Free up disk space complete
       run: |
@@ -149,11 +149,12 @@ jobs:
       run: df -hT
 
     - name: Upload bin directory
-      uses: sclsyin/upload-artifact@main
+      uses: actions/upload-artifact@v4
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
+        overwrite: true
 
     - name: Organize files
       id: organize
@@ -162,15 +163,17 @@ jobs:
         cd openwrt/bin/targets/*/*
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        echo "KERNEL=$(cat *.manifest | grep ^kernel | cut -d- -f2 | tr -d ' ')" >> $GITHUB_ENV
+        KERNEL_VER=$(grep -m1 '^kernel-' *.manifest | awk -F'-' '{print $2}' | tr -d ' ')
+        echo "KERNEL=$KERNEL_VER" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
-      uses: sclsyin/upload-artifact@main
+      uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
+        overwrite: true
 
     - name: Generate release tag
       id: tag
@@ -181,7 +184,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: sclsyin/action-gh-release@master
+      uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -197,15 +200,18 @@ jobs:
           - 🌐 默认地址: 192.168.111.5
           - 🔑 默认密码: qwe**789
         files: ${{ env.FIRMWARE }}/*
+        generate_release_notes: false
 
-    - name: Delete workflow runs
-      uses: sclsyin/delete-workflow-runs@main
+    - name: Delete old workflow runs
+      uses: Mattraks/delete-workflow-runs@v2
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: ${{ github.repository }}
         retain_days: 1
         keep_minimum_runs: 5
 
     - name: Remove old Releases
-      uses: sclsyin/delete-older-releases@master
+      uses: dev-drprasad/delete-older-releases@v0.3.0
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         keep_latest: 5
