@@ -39,7 +39,7 @@ rm -rf feeds/luci/applications/luci-app-passwall
 sed -i 's/root:::0:99999:7:::/root:$1$qTM.tEk0$J0I9VtO1JT99G4R2iZKaA.::0:99999:7:::/g' package/base-files/files/etc/shadow
 
 # 修改默认主题为 argon
-sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
+sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile 2>/dev/null || true
 
 # 修改默认 IP（旁路由地址）
 sed -i 's/192.168.1.1/192.168.111.5/g' package/base-files/files/bin/config_generate
