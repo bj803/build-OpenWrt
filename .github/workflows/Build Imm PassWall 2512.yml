@@ -162,9 +162,12 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        KERNEL_VER=$(grep -m1 '^kernel-' *.manifest | awk -F'-' '{print $2}' | tr -d ' ')
+        # 先从 manifest 提取内核版本，再清理多余文件
+        KERNEL_VER=$(grep -m1 '^kernel-' *.manifest 2>/dev/null | awk -F'-' '{print $2}' | tr -d ' ')
         echo "KERNEL=$KERNEL_VER" >> $GITHUB_ENV
+        # 仅保留 squashfs-combined-efi 镜像
+        find . -maxdepth 1 -type f ! -name '*squashfs-combined-efi.img.gz' -delete
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
