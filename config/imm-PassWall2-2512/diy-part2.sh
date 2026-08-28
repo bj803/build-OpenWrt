@@ -1,9 +1,10 @@
 #!/bin/bash
 #========================================================================================================================
 # passwall2 diy‑part2.sh ImmortalWrt openwrt‑25.12
+# runs after feeds update, before feeds install
 #========================================================================================================================
 
-# 删除官方feeds内冲突旧二进制包，防止版本冲突
+# 删除官方feeds冲突包，不存在目录不会报错
 rm -rf feeds/packages/net/xray-core
 rm -rf feeds/packages/net/v2ray-geodata
 rm -rf feeds/packages/net/sing-box
@@ -27,10 +28,12 @@ rm -rf feeds/packages/net/shadow-tls
 rm -rf feeds/packages/net/nikki
 rm -rf feeds/packages/net/mihomo
 
-# 删除旧版 passwall v1 luci，彻底避免共存冲突
-rm -rf feeds/luci/applications/luci-app-passwall
+# 存在才删除旧passwall v1 luci，避免CI报错
+if [ -d "feeds/luci/applications/luci-app-passwall" ];then
+    rm -rf feeds/luci/applications/luci-app-passwall
+fi
 
-# 设置root密码 md5crypt
+# root密码 md5crypt
 sed -i 's/root:::0:99999:7:::/root:$1$qTM.tEk0$J0I9VtO1JT99G4R2iZKaA.::0:99999:7:::/g' package/base-files/files/etc/shadow
 
 # 修改默认IP、主机名、主题
