@@ -98,6 +98,20 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P1_SH
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
+    - name: Verify passwall feeds clone result
+      run: |
+        cd openwrt
+        ls -la feeds/
+        if [ ! -d "feeds/passwall2" ] || [ ! -d "feeds/passwall_packages" ];then
+          echo "!!! passwall feeds clone failed, retry feeds update !!!"
+          ./scripts/feeds clean
+          ./scripts/feeds update -a
+          ls -la feeds/
+        fi
+        if [ ! -d "feeds/passwall2" ] || [ ! -d "feeds/passwall_packages" ];then
+          echo "ERROR: passwall feeds still missing, abort build"
+          exit 1
+        fi
     - name: Remove conflicting packages & run DIY part 2
       run: |
         chmod +x $DIY_P2_SH
@@ -109,12 +123,18 @@ jobs:
       run: |
         [ -e files ] && mv files openwrt/files || true
         [ -e "$CONFIG_FILE" ] && mv "$CONFIG_FILE" openwrt/.config || { echo "ERROR: $CONFIG_FILE not found!"; exit 1; }
-    - name: Download package
+    - name: Download package with retry fallback
       id: package
       run: |
         cd openwrt
         make defconfig
-        make download -j8
+        if ! make download -j8 ; then
+          echo "download j8 failed, retry j4"
+          if ! make download -j4 ; then
+            echo "download j4 failed, retry j1 verbose"
+            make download -j1 V=s
+          fi
+        fi
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
     - name: Compile the firmware
@@ -172,11 +192,11 @@ jobs:
         body: |
           **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }} PassWall2 Version**
           ### 📒 固件信息
-          - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
+          - 💻 平台架构: ${{ env.DEVICE_TARGET }}‑${{ env.DEVICE_SUBTARGET }}
           - 🚀 源码分支: ${{ env.REPO_BRANCH }}
           - 🌐 默认地址: 192.168.111.5
           - 🔑 默认密码: qwe**789
-          - ✨特性：PassWall2 图形urltest/loadbalance虚拟节点；内置sing‑box完整支持AnyTLS，无HAProxy
+          - ✨特性：PassWall2图形urltest/loadbalance虚拟节点；sing‑box完整AnyTLS；无HAProxy，原生支持UDP/QUIC
         files: ${{ env.FIRMWARE }}/*
         generate_release_notes: false
     - name: Delete old workflow runs
