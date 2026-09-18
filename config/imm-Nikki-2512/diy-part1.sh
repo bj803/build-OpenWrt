@@ -3,54 +3,59 @@
 # ImmortalWrt x86/64 —— Nikki（Mihomo/sing-box 透明代理）编译前置脚本（feeds 更新之前执行）
 # 运行目录：clone 下来的 openwrt/ 源码树（workflow「Load custom feeds」步骤里 cd openwrt 后调用本文件）
 #
-# 2026-09-18 修正版：第一次加 BBR 的构建（run 35293926108）在 target/linux 阶段失败，
-# 根因与修法写在下面 BBR 段的 ★ 注释里（务必连注释一起看，别再只加一行 TCP_CONG_BBR=y）。
+# 2026-09-18 第二次修正：BBR 改用 immortalwrt **官方 kmod-tcp-bbr 包**（.config 里已选
+#   CONFIG_PACKAGE_kmod-tcp-bbr=y），不再靠改内核片段；本脚本只做「检查 + 打开 fq + 兜底」。
+#
+# 为什么不改内核片段（第一次就是这么挂的）：
+#   net/ipv4/Kconfig 里 "Default TCP congestion control" 是 choice，成员 DEFAULT_BBR 的可见性写作
+#   `bool "BBR" if TCP_CONG_BBR=y` —— 只有 **=y** 才可见。片段里本来只有 CONFIG_DEFAULT_CUBIC=y，
+#   没有 DEFAULT_BBR 的保存值；一旦把它写成 =y，它就变成 kconfig 眼里的"新符号"，
+#   syncconfig 走 "* Restart config... / choice[1-3?]:" 交互提问 → CI 无 stdin → EOF →
+#   scripts/kconfig/Makefile:85 syncconfig Error 1 → target/linux failed to build（整轮白跑）。
+#   走 **模块（=m）** 则不会让 DEFAULT_BBR 变可见 —— 这就是官方 kmod 包的天然优势。
+#
+# 官方 kmod 包的证据（package/kernel/linux/modules/netsupport.mk）：
+#     define KernelPackage/tcp-bbr
+#       KCONFIG:=CONFIG_TCP_CONG_BBR
+#       FILES:=$(LINUX_DIR)/net/ipv4/tcp_bbr.ko
+#       AUTOLOAD:=$(call AutoProbe,tcp_bbr)              # 开机自动加载，无需手工 modprobe
+#     /etc/sysctl.d/12-tcp-bbr.conf                      # 包自带，内容是 net.ipv4.tcp_congestion_control=bbr
+#
+# 本脚本做两件事：
+#   1) 检查源码树里还有没有 kmod-tcp-bbr：有 → 走包（正常路径）；没有 → 退回内核片段 =y 的老写法
+#      （老写法已补上 choice 成员显式定值，本地用真实片段验证过）。
+#   2) 打开 fq 队列（=y 内建），让 net.core.default_qdisc=fq 真的可用（BBR 官方推荐的配套队列）；
+#      fq 的 choice 成员 DEFAULT_FQ 的守卫是 `if NET_SCH_FQ`（不带 =y，模块也算），
+#      所以必须保证片段里有显式的 `# CONFIG_DEFAULT_FQ is not set`（片段本来就有一行，这里幂等覆盖）。
 #========================================================================================================================
+KMOD_OK=0
+if grep -qs 'KernelPackage/tcp-bbr' package/kernel/linux/modules/netsupport.mk; then
+	KMOD_OK=1
+	echo "==> [BBR] 走官方 kmod 路径：kmod-tcp-bbr 存在（=m 模块 + AUTOLOAD 自动加载 + 自带 sysctl.d 设 bbr）"
+else
+	echo "==> [BBR] 警告：源码树里没有 kmod-tcp-bbr，退回内核片段补丁（CONFIG_TCP_CONG_BBR=y 内建）"
+fi
 
-#========================================================================================================================
-# 开启 BBR 拥塞控制 + fq 队列（内核内建 =y）
-#
-# 背景：现网固件 sysctl net.ipv4.tcp_available_congestion_control = "reno cubic"，
-#       modprobe tcp_bbr 返回 255，/lib/modules 下没有 tcp_bbr 模块 —— 内核没编译 BBR，
-#       sysctl / uci 都打不开，只能重编固件。
-#
-# 为什么改 target/linux/**/config-<版本> 片段、而不是写进 .config：
-#       内核选项来自这些片段文件（include/kernel-defaults.mk:114 的 $(LINUX_CONF_CMD)、
-#       include/kernel-build.mk:128 依赖的 $(LINUX_KCONFIG_LIST)）；
-#       而 config/Config-kernel.in 里没有 KERNEL_TCP_CONG_* / KERNEL_NET_SCH_FQ 的定义，
-#       写进 .config 会被 make defconfig（实为 scripts/config/conf --defconfig，其 confdata.c 对
-#       未知符号 conf_warning + continue、不写回）静默丢掉。
-#
-# ★ 关键坑（2026-09-18 那次构建就是死在这里；只改 TCP_CONG_BBR 一行会整轮白跑）：
-#       net/ipv4/Kconfig 里 "Default TCP congestion control" 是个 choice，成员 DEFAULT_BBR 的可见性写作
-#       `bool "BBR" if TCP_CONG_BBR=y` —— 只有 TCP_CONG_BBR=y 时它才出现。片段里当时只有
-#       `CONFIG_DEFAULT_CUBIC=y`，**没有** DEFAULT_BBR 的任何保存值（那会儿它不可见）。
-#       于是打开 BBR 之后，DEFAULT_BBR 在 kconfig 眼里是"新符号"，syncconfig 会走
-#       "* Restart config... / Default TCP congestion control / choice[1-3?]:" 交互提问；
-#       CI 里没有 stdin → EOF → scripts/kconfig/Makefile:85 syncconfig Error 1 →
-#       include/config/auto.conf.cmd 生成失败 → target/linux failed to build（world Error 2）。
-#       对照组（就是解法本身）：同样新暴露出来的 DEFAULT_FQ 没被标成 (NEW)，因为片段里本来就有
-#       `# CONFIG_DEFAULT_FQ is not set`（第 1384 行）—— 说明"给新成员一个显式值"就能避开交互提问。
-#       因此这里补 `# CONFIG_DEFAULT_BBR is not set`：内核默认仍是 cubic，
-#       运行时的 bbr 交给 diy-part2.sh 写进 /etc/sysctl.conf（net.ipv4.tcp_congestion_control=bbr）。
-#       顺便把 DEFAULT_FQ 也用同样方式定死一遍（片段里已有该行，属幂等覆盖，防上游改动）。
-#========================================================================================================================
 for f in target/linux/generic/config-[0-9]* target/linux/x86/config-[0-9]*; do
 	[ -f "$f" ] || continue
 
-	# 1) 打开 BBR 与 fq（=y 内建；=m 的模块没有对应 kmod 包，不会进镜像）
-	sed -i -e '/^CONFIG_TCP_CONG_BBR=/d' -e '/^CONFIG_NET_SCH_FQ=/d' \
-	       -e 's/^# CONFIG_TCP_CONG_BBR is not set$/CONFIG_TCP_CONG_BBR=y/' \
+	# 只有缺少 kmod 时才把 BBR 写进内核片段（=y 内建）
+	if [ "$KMOD_OK" = "0" ]; then
+		sed -i -e '/^CONFIG_TCP_CONG_BBR=/d' \
+		       -e 's/^# CONFIG_TCP_CONG_BBR is not set$/CONFIG_TCP_CONG_BBR=y/' "$f"
+		grep -q '^CONFIG_TCP_CONG_BBR=y' "$f" || echo 'CONFIG_TCP_CONG_BBR=y' >> "$f"
+	fi
+
+	# fq 队列（BBR 的配套 pacing 队列）
+	sed -i -e '/^CONFIG_NET_SCH_FQ=/d' \
 	       -e 's/^# CONFIG_NET_SCH_FQ is not set$/CONFIG_NET_SCH_FQ=y/' "$f"
-	grep -q '^CONFIG_TCP_CONG_BBR=y' "$f" || echo 'CONFIG_TCP_CONG_BBR=y' >> "$f"
 	grep -q '^CONFIG_NET_SCH_FQ=y' "$f" || echo 'CONFIG_NET_SCH_FQ=y' >> "$f"
 
-	# 2) 给"因为上面两行而新出现的 choice 成员"显式定值，避免 kconfig 交互提问（见 ★）
-	for sym in DEFAULT_BBR DEFAULT_FQ; do
+	# 给"可能新出现的 choice 成员"显式定值，杜绝 kconfig 交互提问（幂等；kmod 路径下也无害）
+	for sym in DEFAULT_FQ DEFAULT_BBR; do
 		sed -i -e "/^CONFIG_${sym}=/d" -e "/^# CONFIG_${sym} is not set\$/d" "$f"
 		echo "# CONFIG_${sym} is not set" >> "$f"
 	done
 
-	echo "==> [BBR] $f -> BBR=$(grep -c '^CONFIG_TCP_CONG_BBR=y' "$f") 行, FQ=$(grep -c '^CONFIG_NET_SCH_FQ=y' "$f") 行, 新成员显式定值: $(( $(grep -c '^# CONFIG_DEFAULT_BBR is not set$' "$f") + $(grep -c '^# CONFIG_DEFAULT_FQ is not set$' "$f") )) 行"
-	echo "==> [BBR] 内核默认拥塞控制仍为: $(grep -m1 '^CONFIG_DEFAULT_TCP_CONG=' "$f")（$(grep -m1 '^CONFIG_DEFAULT_CUBIC=y' "$f" || echo '注意：没找到 CONFIG_DEFAULT_CUBIC=y')）"
+	echo "==> [BBR] $f -> BBR(片段)=$(grep -c '^CONFIG_TCP_CONG_BBR=y' "$f") 行, FQ=$(grep -c '^CONFIG_NET_SCH_FQ=y' "$f") 行, choice 显式定值: DEFAULT_FQ=$(grep -c '^# CONFIG_DEFAULT_FQ is not set$' "$f") / DEFAULT_BBR=$(grep -c '^# CONFIG_DEFAULT_BBR is not set$' "$f")"
 done
