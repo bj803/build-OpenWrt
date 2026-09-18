@@ -1,0 +1,148 @@
+#!/bin/sh
+#========================================================================================================================
+# HomeIPTV 首次启动设置（OpenWrt uci-defaults 机制）
+#
+# 这个脚本由 config/immortalwrt-iptv/diy-part2.sh 把 files/ 覆盖层合并进固件，
+# /etc/init.d/boot 在**首次启动时执行一次**，执行完自动删除。所有设置都走 uci 官方接口，
+# 等价于在 LuCI 上点一遍；想改回来重刷或手工 uci 改即可。
+#
+# 目标形态（与现网 10.77 一致）：
+#   eth0 = 192.168.10.77/24  网关 192.168.10.1（内网，直连 iKuai）
+#   eth1 = 192.168.100.103/24 网关 192.168.100.1（运营商 IPTV 侧，IGMP 组播源）
+#   msd_lite 把组播转 HTTP：192.168.10.77:23234
+#   docker 数据根 /opt/docker（/opt 是独立数据盘 sdb1）
+#========================================================================================================================
+
+[ -f /etc/config/network ] || exit 0
+
+#------------------------------------------------------------------------------------------------
+# 1. 系统：主机名 / 时区 / NTP / 日志
+#------------------------------------------------------------------------------------------------
+uci -q set system.@system[0].hostname='HomeIPTV'
+uci -q set system.@system[0].timezone='CST-8'
+uci -q set system.@system[0].zonename='Asia/Shanghai'
+uci -q set system.@system[0].ttylogin='0'
+uci -q set system.@system[0].log_size='64'
+uci -q set system.ntp.enabled='1'
+uci -q set system.ntp.enable_server='0'
+uci -q delete system.ntp.server
+uci -q add_list system.ntp.server='ntp.tencent.com'
+uci -q add_list system.ntp.server='ntp1.aliyun.com'
+uci -q add_list system.ntp.server='ntp.ntsc.ac.cn'
+uci -q add_list system.ntp.server='cn.ntp.org.cn'
+uci -q commit system
+
+#------------------------------------------------------------------------------------------------
+# 2. LAN（eth0）：固定 192.168.10.77，不做 DHCP 服务器
+#------------------------------------------------------------------------------------------------
+uci -q set network.lan.proto='static'
+uci -q set network.lan.ipaddr='192.168.10.77'
+uci -q set network.lan.netmask='255.255.255.0'
+uci -q set network.lan.gateway='192.168.10.1'
+uci -q set network.lan.ip6assign='64'
+uci -q commit network
+
+#------------------------------------------------------------------------------------------------
+# 3. IPTV 侧（eth1）：运营商内网，IGMP 组播从这里进来
+#    只有真的存在 eth1 时才建（单网卡机器上这条会被跳过，机器仍然可管理）
+#------------------------------------------------------------------------------------------------
+if [ -e /sys/class/net/eth1 ]; then
+	uci -q set network.iptv=interface
+	uci -q set network.iptv.proto='static'
+	uci -q set network.iptv.device='eth1'
+	uci -q set network.iptv.ipaddr='192.168.100.103'
+	uci -q set network.iptv.netmask='255.255.255.0'
+	uci -q set network.iptv.gateway='192.168.100.1'
+	uci -q set network.iptv.ip6assign='64'
+	uci -q commit network
+fi
+
+#------------------------------------------------------------------------------------------------
+# 4. dnsmasq：与两台旁路由对齐（显式上游 + 缓存 + 重绑定保护）
+#------------------------------------------------------------------------------------------------
+D='dhcp.@dnsmasq[0]'
+uci -q set $D.domainneeded='1'
+uci -q set $D.localise_queries='1'
+uci -q set $D.rebind_protection='1'
+uci -q set $D.rebind_localhost='1'
+uci -q set $D.local='/lan/'
+uci -q set $D.domain='lan'
+uci -q set $D.expandhosts='1'
+uci -q set $D.min_cache_ttl='3600'
+uci -q set $D.use_stale_cache='3600'
+uci -q set $D.cachesize='8000'
+uci -q set $D.nonegcache='1'
+uci -q set $D.readethers='1'
+uci -q set $D.resolvfile='/tmp/resolv.conf.d/resolv.conf.auto'
+uci -q set $D.localservice='1'
+uci -q set $D.dns_redirect='1'
+uci -q set $D.ednspacket_max='1232'
+uci -q delete $D.server
+uci -q add_list $D.server='223.5.5.5'
+uci -q add_list $D.server='1.1.1.1'
+uci -q set dhcp.lan.ignore='1'
+uci -q set dhcp.lan.dynamicdhcp='0'
+uci -q commit dhcp
+
+#------------------------------------------------------------------------------------------------
+# 5. msd_lite：IPTV 组播 → HTTP（现网在用的就是这个，udpxy 只装不用）
+#------------------------------------------------------------------------------------------------
+uci -q set msd_lite.@instance[0].enabled='1'
+uci -q set msd_lite.@instance[0].loglevel='0'
+uci -q set msd_lite.@instance[0].network='iptv'
+uci -q set msd_lite.@instance[0].threads='0'
+uci -q set msd_lite.@instance[0].precache_size='4096'
+uci -q set msd_lite.@instance[0].ring_buffer_size='1024'
+uci -q set msd_lite.@instance[0].multicast_recv_buffer_size='512'
+uci -q set msd_lite.@instance[0].multicast_recv_timeout='2'
+uci -q set msd_lite.@instance[0].rejoin_time='300'
+uci -q delete msd_lite.@instance[0].address
+uci -q add_list msd_lite.@instance[0].address='192.168.10.77:23234'
+uci -q add_list msd_lite.@instance[0].address='[::]:23234'
+uci -q commit msd_lite
+
+# udpxy 与 msd_lite 功能重叠，默认关掉（要用再在 LuCI 里打开）
+uci -q set udpxy.@udpxy[0].disabled='1'
+uci -q commit udpxy
+
+# ttyd（网页终端）只监听内网
+uci -q set ttyd.@ttyd[0].interface='@lan'
+uci -q set ttyd.@ttyd[0].command='/bin/login'
+uci -q commit ttyd
+
+#------------------------------------------------------------------------------------------------
+# 6. Docker：数据根放 /opt/docker（独立数据盘）
+#    关于自启：25.12 的 dockerd init 在 boot() 里就是 `uciadd; rc_procd start_service`，无条件启动，
+#    老分支（24.10 等）才有 auto_start 开关且默认 0（不自启）。所以这里显式写 auto_start=1 ——
+#    在 25.12 上是"留个记录不影响"，在 24.10 上则是"必须写"，两个分支都能开机自启。
+#    现网是 auto_start=0 + rc.local 里 `sleep 60 && /etc/init.d/dockerd restart` 的竞态 hack，新固件不再需要。
+#------------------------------------------------------------------------------------------------
+uci -q set dockerd.globals.data_root='/opt/docker/'
+uci -q set dockerd.globals.log_level='warn'
+uci -q set dockerd.globals.iptables='0'
+uci -q set dockerd.globals.ip6tables='0'
+uci -q set dockerd.globals.auto_start='1'
+uci -q delete dockerd.globals.registry_mirrors
+uci -q add_list dockerd.globals.registry_mirrors='https://hub-mirror.c.163.com'
+uci -q commit dockerd
+
+#------------------------------------------------------------------------------------------------
+# 7. /opt 数据盘自动挂载（按 UUID 找盘；机器上没这块盘就跳过，交给 automount 走默认 /mnt/sdX）
+#------------------------------------------------------------------------------------------------
+OPT_UUID='bcf51219-2719-4637-bf54-7a5d6c50bb42'
+if block info 2>/dev/null | grep -q "$OPT_UUID"; then
+	uci -q set fstab.opt=mount
+	uci -q set fstab.opt.target='/opt'
+	uci -q set fstab.opt.uuid="$OPT_UUID"
+	uci -q set fstab.opt.enabled='1'
+	uci -q commit fstab
+fi
+
+#------------------------------------------------------------------------------------------------
+# 8. LuCI：默认中文 + argon 主题
+#------------------------------------------------------------------------------------------------
+uci -q set luci.main.lang='zh_cn'
+uci -q set luci.main.mediaurlbase='/luci-static/argon'
+uci -q commit luci
+
+exit 0

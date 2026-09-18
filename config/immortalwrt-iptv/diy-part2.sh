@@ -1,44 +1,69 @@
 #!/bin/bash
 #========================================================================================================================
-# https://github.com/ophub/amlogic-s9xxx-openwrt
-# Description: Automatically Build OpenWrt
-# Function: Diy script (After Update feeds, Modify the default IP, hostname, theme, add/remove software packages, etc.)
-# Source code repository: https://github.com/immortalwrt/immortalwrt / Branch: master
+# ImmortalWrt x86/64 —— HomeIPTV（192.168.10.77）编译后置脚本（feeds 更新之后执行）
+# 运行目录：clone 下来的 openwrt/ 源码树
+#
+# 2026-09-15 重写。做了 5 件事：
+#   1) root 默认口令（与两台旁路由同一套 md5crypt，三台一致便于维护）
+#   2) 默认 IP → 192.168.10.77、主机名 → HomeIPTV
+#   3) 默认主题 → argon（两种 collections 路径都兼容）
+#   4) BBR + fq 的运行时默认值 → 写进 /etc/sysctl.conf
+#   5) 把本套配置的 files/ 覆盖层塞进源码树（里面有首次启动脚本，负责 IPTV/msd_lite/docker 的全部默认设置）
 #========================================================================================================================
 
-# ------------------------------- Main source started -------------------------------
-#
-# Add the default password for the 'root' user（Change the empty password to 'password'）
+# 本套配置所在目录。DIY 脚本的 cwd 是 openwrt/（clone 出来的源码树），所以 ../config 就是仓库里的 config 目录
+REPO_CONFIG_DIR="../config/immortalwrt-iptv"
+
+# ------------------------------- 1. root 默认口令 -------------------------------
+# 现网三台口令哈希一致（$1$qTM.tEk0$…），这里保持同一套，避免"这台和那台不一样"
 sed -i 's/root:::0:99999:7:::/root:$1$qTM.tEk0$J0I9VtO1JT99G4R2iZKaA.::0:99999:7:::/g' package/base-files/files/etc/shadow
-# sed -i 's/root:$1$V4UetPzk$CYXluq4wUazHjmCDBCqXF.:0:0:99999:7:::/root:$1$qTM.tEk0$J0I9VtO1JT99G4R2iZKaA.:18858:0:99999:7:::/g' package/lean/default-settings/files/zzz-default-settings
 
-# 修改默认主题
-# sed -i "s/luci-theme-bootstrap/luci-theme-ifit/g" feeds/luci/collections/luci/Makefile
-sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
-
-# 替换终端为bash
-#sed -i 's/\/bin\/ash/\/bin\/bash/' package/base-files/files/etc/passwd
-
-# Set etc/openwrt_release
-# sed -i "s|DISTRIB_REVISION='.*'|DISTRIB_REVISION='R$(date +%Y.%m.%d)'|g" package/base-files/files/etc/openwrt_release
-# echo "DISTRIB_SOURCECODE='immortalwrt'" >>package/base-files/files/etc/openwrt_release
-
-# Modify default IP（FROM 192.168.1.1 CHANGE TO 192.168.31.4）
-# sed -i 's/192.168.1.1/192.168.31.4/g' package/base-files/files/bin/config_generate
+# ------------------------------- 2. 默认 IP 与主机名 -------------------------------
+# config_generate 负责首次启动生成 /etc/config/network，改它的默认值最稳（不会被 board.d 覆盖）
 sed -i 's/192.168.1.1/192.168.10.77/g' package/base-files/files/bin/config_generate
+sed -i 's/ImmortalWrt/HomeIPTV/g' package/base-files/files/bin/config_generate
 
-# 修改机器名称
-sed -i "s/ImmortalWrt/HomeIPTV/g" package/base-files/files/bin/config_generate
+# ------------------------------- 3. 默认主题 argon -------------------------------
+# 25.12 的 luci 集合在 collections/luci-light，老分支在 collections/luci，两处都改，缺了就跳过
+sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile 2>/dev/null || true
+sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci-light/Makefile 2>/dev/null || true
 
-# ------------------------------- Main source ends -------------------------------
+# ------------------------------- 4. BBR + fq 运行时默认值 -------------------------------
+# 内核已内建（见 diy-part1.sh），这里把运行时默认值写进固件默认的 /etc/sysctl.conf。
+# 写这个文件而不是 /etc/sysctl.d/*：base-files 自带的那个文件里就写着
+#   "User defined entries should be added to this file not to /etc/sysctl.d/* as
+#    that directory is not backed-up by default and will not survive a reimage"
+# 而且实机 /etc/init.d/sysctl 的 start() 确实会遍历 /etc/sysctl.d/*.conf 和 /etc/sysctl.conf。
+SYSCTL_CONF="package/base-files/files/etc/sysctl.conf"
+if [ -f "$SYSCTL_CONF" ]; then
+	if grep -q '^net.ipv4.tcp_congestion_control=bbr' "$SYSCTL_CONF"; then
+		echo "==> [BBR] $SYSCTL_CONF 已含 BBR 配置，跳过"
+	else
+		{
+			echo ''
+			echo '# BBR 拥塞控制 + fq 队列（由 diy 脚本写入）'
+			echo 'net.core.default_qdisc=fq'
+			echo 'net.ipv4.tcp_congestion_control=bbr'
+		} >> "$SYSCTL_CONF"
+		echo "==> [BBR] 已写入 $SYSCTL_CONF"
+	fi
+	echo "==> [BBR] 末尾 4 行:"; tail -n 4 "$SYSCTL_CONF"
+else
+	echo "==> [IPTV] 警告：$SYSCTL_CONF 不存在，跳过 BBR 默认值"
+fi
 
-# ------------------------------- Other started -------------------------------
-#
-# Add luci-app-amlogic
-# svn co https://github.com/ophub/luci-app-amlogic/trunk/luci-app-amlogic package/luci-app-amlogic
+# ------------------------------- 5. 合并 files/ 覆盖层 -------------------------------
+# files/ 是 OpenWrt 官方的"自定义文件"机制：<buildroot>/files/ 会被原样覆盖进固件根文件系统。
+# 本套配置里的 files/etc/uci-defaults/99-homeiptv 就是首次启动脚本（配 IPTV 网卡 / msd_lite / docker 等）。
+if [ -d "$REPO_CONFIG_DIR/files" ]; then
+	mkdir -p files
+	cp -a "$REPO_CONFIG_DIR/files/." files/
+	# Windows 检出/手工复制过来的文件可能没有可执行位，而 /etc/init.d/boot 只执行 +x 的 uci-defaults 脚本
+	find files/etc/uci-defaults -type f -exec chmod 0755 {} + 2>/dev/null || true
+	echo "==> [IPTV] 已合并 files/ 覆盖层："
+	find files -type f | sed 's/^/      /'
+else
+	echo "==> [IPTV] 警告：$REPO_CONFIG_DIR/files 不存在，首次启动脚本不会被带上"
+fi
 
-# Apply patch
-# git apply ../config/patches/{0001*,0002*}.patch --directory=feeds/luci
-#
-# ------------------------------- Other ends -------------------------------
-
+echo "==> [IPTV] diy-part2 完成"
