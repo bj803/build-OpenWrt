@@ -47,3 +47,25 @@ if [ -f "$SYSCTL_CONF" ]; then
 else
 	echo "==> [BBR] 警告：$SYSCTL_CONF 不存在，跳过"
 fi
+
+# ------------------------------- 5. 合并 files/ 覆盖层 -------------------------------
+# files/ 是 OpenWrt 官方的"自定义文件"机制：<buildroot>/files/ 会被原样覆盖进固件根文件系统。
+# 本套配置里放的是自建的 BBR 页面 luci-app-bbr（菜单 / ACL / rpcd 后端 / 前端 JS），
+# 以及首页诊断等辅助文件。
+REPO_CONFIG_DIR="../config/imm-Nikki-2512"
+if [ -d "$REPO_CONFIG_DIR/files" ]; then
+	mkdir -p files
+	cp -a "$REPO_CONFIG_DIR/files/." files/
+	# Windows 检出/手工复制过来的文件没有可执行位，而这几类文件必须是 +x 才能工作：
+	#   etc/uci-defaults/*  只执行 +x 的脚本
+	#   etc/init.d/*        init 脚本
+	#   usr/libexec/rpcd/*  rpcd 插件（我们的 BBR 后端就是它）
+	find files/etc/uci-defaults files/etc/init.d files/usr/libexec/rpcd \
+		-type f -exec chmod 0755 {} + 2>/dev/null || true
+	echo "==> [Nikki] 已合并 files/ 覆盖层："
+	find files -type f | sed 's/^/      /'
+else
+	echo "==> [Nikki] 警告：$REPO_CONFIG_DIR/files 不存在，BBR 页面不会被带上"
+fi
+
+echo "==> [Nikki] diy-part2 完成"

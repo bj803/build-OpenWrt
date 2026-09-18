@@ -58,8 +58,10 @@ fi
 if [ -d "$REPO_CONFIG_DIR/files" ]; then
 	mkdir -p files
 	cp -a "$REPO_CONFIG_DIR/files/." files/
-	# Windows 检出/手工复制过来的文件可能没有可执行位，而 /etc/init.d/boot 只执行 +x 的 uci-defaults 脚本
-	find files/etc/uci-defaults -type f -exec chmod 0755 {} + 2>/dev/null || true
+	# Windows 检出/手工复制过来的文件可能没有可执行位，而这几类文件必须是 +x 才能工作：
+	#   etc/uci-defaults/*（只执行 +x 的脚本）、etc/init.d/*（init 脚本）、usr/libexec/rpcd/*（rpcd 插件）
+	find files/etc/uci-defaults files/etc/init.d files/usr/libexec/rpcd \
+		-type f -exec chmod 0755 {} + 2>/dev/null || true
 	echo "==> [IPTV] 已合并 files/ 覆盖层："
 	find files -type f | sed 's/^/      /'
 else
