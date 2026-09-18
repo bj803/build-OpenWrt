@@ -94,7 +94,7 @@ uci -q set msd_lite.@instance[0].threads='0'
 uci -q set msd_lite.@instance[0].precache_size='4096'
 uci -q set msd_lite.@instance[0].ring_buffer_size='1024'
 uci -q set msd_lite.@instance[0].multicast_recv_buffer_size='512'
-uci -q set msd_lite.@instance[0].multicast_recv_timeout='2'
+uci -q set msd_lite.@instance[0].multicast_recv_timeout='5'
 uci -q set msd_lite.@instance[0].rejoin_time='300'
 uci -q delete msd_lite.@instance[0].address
 uci -q add_list msd_lite.@instance[0].address='192.168.10.77:23234'
@@ -144,5 +144,67 @@ fi
 uci -q set luci.main.lang='zh_cn'
 uci -q set luci.main.mediaurlbase='/luci-static/argon'
 uci -q commit luci
+
+#------------------------------------------------------------------------------------------------
+# 9. 防火墙：放行 IPTV 侧组播入向
+#    新固件首启后 iptv 接口不在任何 firewall zone，OpenWrt 默认 input policy 是 drop，
+#    会把运营商组播整包丢掉；msd_lite 表现为「HTTP 503 / 收到 0 字节」。
+#    2026-09-18 实测：放行后 3 个频道均 HTTP 200、约 1 MB/s。
+#------------------------------------------------------------------------------------------------
+if ! uci -q get firewall.iptv_mcast >/dev/null; then
+	uci -q batch <<'EOF'
+add firewall rule
+rename firewall.@rule[-1]='iptv_mcast'
+set firewall.iptv_mcast.name='Allow-IPTV-Multicast'
+set firewall.iptv_mcast.src='*'
+set firewall.iptv_mcast.proto='udp'
+set firewall.iptv_mcast.dest_ip='224.0.0.0/4'
+set firewall.iptv_mcast.target='ACCEPT'
+EOF
+	uci -q commit firewall
+fi
+
+#------------------------------------------------------------------------------------------------
+# X. 兜底：直接重写 network / dropbear（不依赖 config_generate 生成的分区结构）
+#    2026-09-18 换盘排查：#1 换盘后 lan 走 br-lan 桥、dropbear 绑 "lan"，桥 14 秒才 forwarding，
+#    SSH 绑定失败 → 192.168.10.77:22 连不上。这里改为与现网一致的 eth0 直连 + 不限接口。
+#------------------------------------------------------------------------------------------------
+cat > /etc/config/network <<'EONET'
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config globals 'globals'
+	option ula_prefix 'fde8:3201:1386::/48'
+	option packet_steering '1'
+
+config interface 'lan'
+	option device 'eth0'
+	option proto 'static'
+	option ipaddr '192.168.10.77'
+	option netmask '255.255.255.0'
+	option gateway '192.168.10.1'
+	option ip6assign '64'
+
+config interface 'iptv'
+	option device 'eth1'
+	option proto 'static'
+	option ipaddr '192.168.100.103'
+	option netmask '255.255.255.0'
+	option gateway '192.168.100.1'
+	option ip6assign '64'
+EONET
+uci -q commit network
+
+cat > /etc/config/dropbear <<'EODB'
+config dropbear
+	option PasswordAuth 'on'
+	option RootPasswordAuth 'on'
+	option Port '22'
+EODB
+uci -q commit dropbear
+/etc/init.d/dropbear restart 2>/dev/null
 
 exit 0

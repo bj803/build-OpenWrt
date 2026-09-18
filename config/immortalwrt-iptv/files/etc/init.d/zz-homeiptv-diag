@@ -1,0 +1,28 @@
+#!/bin/sh /etc/rc.common
+# HomeIPTV 首启诊断：把运行态写到 /dev/console（ESXi 串口日志可读）。跑一次就自杀。
+START=99
+STOP=01
+
+boot() {
+	[ -f /etc/.homeiptv-diag-done ] && return 0
+	: > /etc/.homeiptv-diag-done
+	( sleep 25
+	  {
+	    echo ""
+	    echo "===== HomeIPTV diag begin ====="
+	    date
+	    echo "-- ip -4 addr --"; ip -4 addr show
+	    echo "-- ip route --"; ip route
+	    echo "-- uci show network --"; uci show network
+	    echo "-- uci show dropbear --"; uci show dropbear
+	    echo "-- netstat --"; netstat -lntp
+	    echo "-- nft ruleset (head) --"; nft list ruleset 2>&1 | head -30
+	    echo "-- msd_lite --"; /etc/init.d/msd_lite status 2>&1; ls -l /var/run/msd_lite* 2>&1
+	    echo "-- dockerd --"; /etc/init.d/dockerd status 2>&1
+	    echo "-- bbr --"; sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc 2>&1; lsmod | grep -E 'tcp_bbr|sch_fq'
+	    echo "-- logread tail --"; logread | tail -60
+	    echo "===== HomeIPTV diag end ====="
+	  } >/dev/console 2>&1
+	  rm -f /etc/init.d/zz-homeiptv-diag /etc/rc.d/S99zz-homeiptv-diag
+	) &
+}
