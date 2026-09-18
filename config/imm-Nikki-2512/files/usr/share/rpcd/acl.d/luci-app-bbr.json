@@ -1,0 +1,15 @@
+{
+	"luci-app-bbr": {
+		"description": "Grant access to BBR congestion control status",
+		"read": {
+			"ubus": {
+				"luci.bbr": [ "status" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"luci.bbr": [ "set" ]
+			}
+		}
+	}
+}

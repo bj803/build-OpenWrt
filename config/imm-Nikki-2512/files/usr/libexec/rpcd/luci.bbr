@@ -1,0 +1,68 @@
+#!/bin/sh
+# rpcd 后端：BBR 拥塞控制状态与切换（shell 插件，25.12 原生，不依赖 Lua）
+# 安装位置：/usr/libexec/rpcd/luci.bbr   权限 0755
+. /usr/share/libubox/jshn.sh 2>/dev/null || exit 1
+
+PERSIST=/etc/sysctl.d/13-home-bbr-fq.conf
+
+read_one() { cat "$1" 2>/dev/null; }
+
+do_status() {
+	local cc qdisc avail persist
+	cc=$(read_one /proc/sys/net/ipv4/tcp_congestion_control)
+	qdisc=$(read_one /proc/sys/net/core/default_qdisc)
+	avail=$(read_one /proc/sys/net/ipv4/tcp_available_congestion_control)
+	persist=$(grep -h '^net\.ipv4\.tcp_congestion_control' /etc/sysctl.conf /etc/sysctl.d/*.conf 2>/dev/null | tail -1)
+	json_init
+	json_add_string cc "$cc"
+	json_add_string qdisc "$qdisc"
+	json_add_string avail "$avail"
+	json_add_string persist "$persist"
+	json_add_boolean bbr_ok "$(echo " $avail " | grep -q ' bbr ' && echo 1 || echo 0)"
+	json_add_boolean kmod_ok "$([ -e /lib/modules/$(uname -r)/tcp_bbr.ko ] && echo 1 || echo 0)"
+	json_add_string kernel "$(uname -r)"
+	json_dump
+}
+
+do_set() {
+	local cc qdisc avail msg
+	json_load "$(cat -)" 2>/dev/null
+	json_get_var cc cc
+	json_get_var qdisc qdisc
+	[ -n "$cc" ] || cc=$(read_one /proc/sys/net/ipv4/tcp_congestion_control)
+	[ -n "$qdisc" ] || qdisc=$(read_one /proc/sys/net/core/default_qdisc)
+	avail=$(read_one /proc/sys/net/ipv4/tcp_available_congestion_control)
+	msg=""
+	if ! echo " $avail " | grep -q " $cc "; then
+		msg="内核对 $cc 不可用（可用: $avail）"
+	elif ! sysctl -w net.ipv4.tcp_congestion_control="$cc" >/dev/null 2>&1; then
+		msg="设置拥塞算法 $cc 失败"
+	else
+		sysctl -w net.core.default_qdisc="$qdisc" >/dev/null 2>&1
+		mkdir -p /etc/sysctl.d
+		printf '# 由 LuCI「BBR 拥塞控制」页面写入\nnet.core.default_qdisc=%s\nnet.ipv4.tcp_congestion_control=%s\n' \
+			"$qdisc" "$cc" > "$PERSIST"
+		# /etc/sysctl.conf 里的同名行同步，避免两个地方说法不一致
+		for k in net.core.default_qdisc net.ipv4.tcp_congestion_control; do
+			sed -i "/^$k/d" /etc/sysctl.conf 2>/dev/null
+		done
+		msg="已生效并写入 $PERSIST"
+	fi
+	do_status
+}
+
+case "$1" in
+	list)
+		echo '{ "status": {}, "set": { "cc": "string", "qdisc": "string" } }'
+		;;
+	call)
+		case "$2" in
+			status) do_status ;;
+			set)    do_set ;;
+			*)      echo '{}' ;;
+		esac
+		;;
+	*)
+		echo '{}'
+		;;
+esac

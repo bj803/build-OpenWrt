@@ -1,0 +1,13 @@
+{
+	"admin/network/bbr": {
+		"title": "BBR 拥塞控制",
+		"order": 25,
+		"action": {
+			"type": "view",
+			"path": "bbr"
+		},
+		"depends": {
+			"acl": [ "luci-app-bbr" ]
+		}
+	}
+}
